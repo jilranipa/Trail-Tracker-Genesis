@@ -95,6 +95,12 @@ const MapDisplay: FC<MapDisplayProps> = ({
           </Tooltip>
         </CircleMarker>
       )}
+      {/* Hide Leaflet copyright */}
+      <style jsx global>{`
+        .leaflet-bottom.leaflet-right {
+          display: none !important;
+        }
+      `}</style>
     </MapContainer>
   );
 };

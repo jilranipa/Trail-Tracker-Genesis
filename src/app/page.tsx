@@ -19,8 +19,8 @@ const MapDisplay = dynamic(() => import('@/components/map-display'), {
 });
 
 const DEFAULT_CENTER: [number, number] = [37.7749, -122.4194]; // San Francisco [lat, lng]
-const DEFAULT_ZOOM = 13;
-const TRACKING_ZOOM = 16;
+const DEFAULT_ZOOM = 16;
+const TRACKING_ZOOM = 20;
 
 const TrailTrackerPage: NextPage = () => {
   const { toast } = useToast();
@@ -44,6 +44,12 @@ const TrailTrackerPage: NextPage = () => {
   useEffect(() => {
     setIsClient(true);
     setStoredTrails(getStoredTrails());
+    var isTrackingNow = localStorage.getItem('isTracking') ?? 0;
+    // console.log("isTrackingNow", typeof(isTrackingNow));
+    setIsTracking(isTrackingNow == 1);
+    if (isTrackingNow) {
+      resumeTrackingSilently(); // 👈 resume without toast or reset
+    }
 
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
@@ -68,7 +74,7 @@ const TrailTrackerPage: NextPage = () => {
       toast({ title: "Error", description: "Geolocation is not supported by your browser.", variant: "destructive" });
       return;
     }
-
+    localStorage.setItem('isTracking', 1);
     setSelectedTrail(null); 
     setPlaybackMarkerPosition(null);
     setCurrentPath([]);
@@ -96,7 +102,7 @@ const TrailTrackerPage: NextPage = () => {
             };
             setCurrentPosition(newPoint);
             setCurrentPath((prevPath) => [...prevPath, newPoint]);
-            setMapCenter([newPoint.lat, newPoint.lng]);
+            // setMapCenter([newPoint.lat, newPoint.lng]);
             console.log("New position:", newPoint);
           },
           (error) => {
@@ -104,7 +110,7 @@ const TrailTrackerPage: NextPage = () => {
             toast({ title: "Geolocation Error", description: error.message, variant: "destructive" });
             setIsTracking(false); 
           },
-          { enableHighAccuracy: true, timeout: 10000, maximumAge: 0 }
+          { enableHighAccuracy: true, timeout: 1000, maximumAge: 0 }
         );
       },
       (error) => {
@@ -113,12 +119,51 @@ const TrailTrackerPage: NextPage = () => {
     );
   }, [toast]);
 
+  const resumeTrackingSilently = useCallback(() => {
+    if (!navigator.geolocation) return;
+
+    navigator.geolocation.getCurrentPosition(
+      (position) => {
+        const initialPos: GeoPoint = {
+          lat: position.coords.latitude,
+          lng: position.coords.longitude,
+          timestamp: Date.now(),
+        };
+        setCurrentPosition(initialPos);
+        setCurrentPath([initialPos]);
+        setMapCenter([initialPos.lat, initialPos.lng]);
+        setMapZoom(TRACKING_ZOOM);
+        setIsTracking(true);
+
+        watchIdRef.current = navigator.geolocation.watchPosition(
+          (pos) => {
+            const newPoint: GeoPoint = {
+              lat: pos.coords.latitude,
+              lng: pos.coords.longitude,
+              timestamp: Date.now(),
+            };
+            setCurrentPosition(newPoint);
+            setCurrentPath((prevPath) => [...prevPath, newPoint]);
+            console.log("New position (resumed):", newPoint);
+          },
+          (error) => {
+            console.error("Error resuming position tracking:", error);
+            setIsTracking(false);
+          },
+          { enableHighAccuracy: true, timeout: 1000, maximumAge: 0 }
+        );
+      },
+      () => {}
+    );
+  }, []);
+
   const handleStopTracking = useCallback(() => {
     if (watchIdRef.current !== null) {
       navigator.geolocation.clearWatch(watchIdRef.current);
       watchIdRef.current = null;
     }
     setIsTracking(false);
+    localStorage.setItem('isTracking', 0);
 
     if (currentPath.length > 1) {
       const startTime = currentPath[0].timestamp;
@@ -202,11 +247,8 @@ const TrailTrackerPage: NextPage = () => {
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
       {/* Controls and header overlayed above the map */}
-      <div className="fixed top-0 left-0 w-full z-30 pointer-events-none">
+      <div className="fixed top-0 right-0 z-30 pointer-events-none">
         <div className="flex flex-col w-full">
-          <div className="bg-background/80 p-3 rounded-lg shadow-lg w-fit mt-4 ml-4 pointer-events-auto">
-            <h1 className="text-2xl font-bold text-primary">Trail Tracker</h1>
-          </div>
           <div className="flex gap-2 justify-end w-full px-4 mt-2 pointer-events-auto">
             {!isTracking ? (
               <Button onClick={handleStartTracking} className="bg-primary hover:bg-primary/90 text-primary-foreground shadow-md">
@@ -263,6 +305,11 @@ const TrailTrackerPage: NextPage = () => {
         onSelectTrail={handleSelectTrail}
         onDeleteTrail={handleDeleteTrail}
       />
+      <div className="fixed bottom-2 right-2 sm:bottom-4 sm:right-6 z-50 pointer-events-none">
+        <div className="bg-background/80 px-3 py-2 rounded-lg shadow-lg text-xs sm:text-base font-bold text-primary pointer-events-auto">
+          Trail Tracker
+        </div>
+      </div>
       {/* Toast overlayed above everything */}
       <div className="fixed top-6 right-6 z-[9999] pointer-events-none">
         <Toaster />

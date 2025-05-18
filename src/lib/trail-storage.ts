@@ -1,6 +1,7 @@
-import type { Trail } from '@/types';
+import type { GeoPoint, Trail } from '@/types';
 
 const TRAILS_STORAGE_KEY = 'trailTrackerApp_trails';
+const CURRENT_PATH_STORAGE_KEY = 'trailTrackerApp_currentPath';
 
 export function getStoredTrails(): Trail[] {
   if (typeof window === 'undefined') {
@@ -55,4 +56,33 @@ export function calculateDistance(path: { lat: number, lng: number }[]): number 
     totalDistance += R * c;
   }
   return totalDistance;
+}
+
+export function getStoredCurrentPath(): GeoPoint[] {
+  if (typeof window === 'undefined') return [];
+  try {
+    const raw = localStorage.getItem(CURRENT_PATH_STORAGE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (error) {
+    console.error('Error loading current path from localStorage:', error);
+    return [];
+  }
+}
+
+export function saveStoredCurrentPath(path: GeoPoint[]): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.setItem(CURRENT_PATH_STORAGE_KEY, JSON.stringify(path));
+  } catch (error) {
+    console.error('Error saving current path to localStorage:', error);
+  }
+}
+
+export function clearStoredCurrentPath(): void {
+  if (typeof window === 'undefined') return;
+  try {
+    localStorage.removeItem(CURRENT_PATH_STORAGE_KEY);
+  } catch (error) {
+    console.error('Error clearing current path from localStorage:', error);
+  }
 }

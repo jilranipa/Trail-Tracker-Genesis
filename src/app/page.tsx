@@ -7,7 +7,14 @@ import HistoryModal from "@/components/history-modal";
 import { Button } from "@/components/ui/button";
 import { Slider } from "@/components/ui/slider";
 import { useToast } from "@/hooks/use-toast";
-import { getStoredTrails, saveStoredTrails, calculateDistance } from "@/lib/trail-storage";
+import {
+  getStoredTrails,
+  saveStoredTrails,
+  calculateDistance,
+  getStoredCurrentPath,
+  saveStoredCurrentPath,
+  clearStoredCurrentPath,
+} from "@/lib/trail-storage";
 import type { GeoPoint, Trail } from "@/types";
 import { Play, Square, History, Route, CalendarClock, Ruler } from "lucide-react";
 import { format } from "date-fns";
@@ -44,11 +51,20 @@ const TrailTrackerPage: NextPage = () => {
   useEffect(() => {
     setIsClient(true);
     setStoredTrails(getStoredTrails());
-    var isTrackingNow = localStorage.getItem('isTracking') ?? 0;
-    // console.log("isTrackingNow", typeof(isTrackingNow));
-    setIsTracking(isTrackingNow == 1);
+
+    const isTrackingNow = localStorage.getItem('isTracking') === '1';
+    setIsTracking(isTrackingNow);
+
     if (isTrackingNow) {
-      resumeTrackingSilently(); // 👈 resume without toast or reset
+      const storedPath = getStoredCurrentPath();
+      if (storedPath.length > 0) {
+        setCurrentPath(storedPath);
+        const lastPoint = storedPath[storedPath.length - 1];
+        setCurrentPosition(lastPoint);
+        setMapCenter([lastPoint.lat, lastPoint.lng]);
+        setMapZoom(TRACKING_ZOOM);
+      }
+      resumeTrackingSilently(); // Resume tracking without resetting state
     }
 
     if (navigator.geolocation) {
@@ -74,7 +90,7 @@ const TrailTrackerPage: NextPage = () => {
       toast({ title: "Error", description: "Geolocation is not supported by your browser.", variant: "destructive" });
       return;
     }
-    localStorage.setItem('isTracking', 1);
+    localStorage.setItem('isTracking', '1');
     setSelectedTrail(null); 
     setPlaybackMarkerPosition(null);
     setCurrentPath([]);
@@ -101,9 +117,14 @@ const TrailTrackerPage: NextPage = () => {
               timestamp: Date.now(),
             };
             setCurrentPosition(newPoint);
-            setCurrentPath((prevPath) => [...prevPath, newPoint]);
+            console.log("New position q:", currentPath);
+            setCurrentPath((prevPath) => {
+              const updatedPath = [...prevPath, newPoint];
+              saveStoredCurrentPath(updatedPath);
+              return updatedPath;
+            });
             // setMapCenter([newPoint.lat, newPoint.lng]);
-            console.log("New position:", newPoint);
+            console.log("New position:", currentPath);
           },
           (error) => {
             console.error("Error watching position:", error);
@@ -163,7 +184,7 @@ const TrailTrackerPage: NextPage = () => {
       watchIdRef.current = null;
     }
     setIsTracking(false);
-    localStorage.setItem('isTracking', 0);
+    localStorage.setItem('isTracking', '0');
 
     if (currentPath.length > 1) {
       const startTime = currentPath[0].timestamp;
@@ -186,6 +207,7 @@ const TrailTrackerPage: NextPage = () => {
     }
     setCurrentPath([]); 
     setCurrentPosition(null);
+    clearStoredCurrentPath();
   }, [currentPath, storedTrails, toast]);
 
   const handleSelectTrail = useCallback((trail: Trail) => {
@@ -243,7 +265,7 @@ const TrailTrackerPage: NextPage = () => {
       </div>
     );
   }
-
+  console.log('currentPath',currentPath);
   return (
     <div className="relative h-screen w-screen overflow-hidden bg-background">
       {/* Controls and header overlayed above the map */}
